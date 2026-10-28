@@ -1,0 +1,17 @@
+# Python / virtualenv
+.venv/
+__pycache__/
+*.pyc
+
+# PyInstaller 打包產物
+build/
+dist/
+*.spec
+
+# 執行時產生的記錄（內含辨識出的文字）
+voice_debug.log
+.deps_ok
+
+# 編輯器
+.vscode/
+.idea/
