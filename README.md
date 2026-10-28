@@ -38,7 +38,6 @@ Windows 桌面常駐小程式（非網頁）。按 **Alt+R** 開始錄音並即�
 | `start_whisper.bat` | 一鍵啟動：自動找 Python、建 `.venv`、裝套件、背景啟動 |
 | `requirements_whisper.txt` | 套件清單 |
 | `build_exe.bat` | 打包成 exe（PyInstaller，`--onedir`） |
-| `voice_to_clip.pyw`、`start.bat`、`requirements.txt` | 舊版：使用 Windows 內建語音辨識。在部分電腦上聽得到聲音卻沒有文字，已由 Whisper 版取代，可刪除 |
 | `voice_debug.log` | 執行後自動產生的診斷記錄 |
 | `USER_GUIDE.md` | 使用手冊 |
 | `CHANGELOG.md` | 更新紀錄（目前版本 0.1.0） |
