@@ -14,7 +14,7 @@ Primary file: `voice_whisper.pyw`. The user communicates in Traditional Chinese;
 | File | Role |
 |---|---|
 | `voice_whisper.pyw` | The app (current, offline faster-whisper) |
-| `start_whisper.bat` | Finds Python 3.11–3.13, creates `.venv`, installs `requirements_whisper.txt`, launches with `pythonw` |
+| `start_whisper.bat` | Finds Python 3.11–3.14, creates `.venv`, installs `requirements_whisper.txt`, launches with `pythonw` |
 | `build_exe.bat` | Kills running `VoiceWhisper.exe`, ensures `.venv`, runs PyInstaller `--onedir --noconsole` |
 | `requirements_whisper.txt` | pystray, Pillow, numpy, sounddevice, faster-whisper |
 | `voice_to_clip.pyw` (+ `start.bat`, `requirements.txt`) | Legacy version using Windows `SpeechRecognizer` via winrt. Obsolete (see History). Do not revive unless asked |
@@ -61,7 +61,7 @@ Primary file: `voice_whisper.pyw`. The user communicates in Traditional Chinese;
 | Hotkey does nothing | Another instance already running (mutex), or key conflict; check tray icon |
 | Build: "存取被拒 / PermissionError ... .pyd" | Old `VoiceWhisper.exe` still running or AV scanning; kill process, delete `dist`/`build`, retry |
 | exe: "Failed to load Python DLL" | User opened `build\VoiceWhisper\VoiceWhisper.exe`; the real one is in `dist\VoiceWhisper\` |
-| `.bat` can't find Python | Needs 3.11–3.13. The script checks `py -3.x`, `%USERPROFILE%\.pyenv\pyenv-win\versions\3.x*`, `%LOCALAPPDATA%\Programs\Python\Python3xx`, then `python` on PATH. Delete stale `.venv` if created with a wrong version |
+| `.bat` can't find Python | Needs 3.11–3.14 (3.14 verified working on the user's machine, 2026-11-05). The script checks `py -3.x`, `%USERPROFILE%\.pyenv\pyenv-win\versions\3.x*`, `%LOCALAPPDATA%\Programs\Python\Python3xx`, `%ProgramFiles%\Python3xx`, then `python` on PATH. Delete stale `.venv` if created with a wrong version |
 | `ModuleNotFoundError` in a built exe | Packages were not installed in the Python that ran PyInstaller; always build via `build_exe.bat` (uses `.venv`) |
 
 ## Batch-file pitfalls learned (cmd.exe)

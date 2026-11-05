@@ -5,12 +5,13 @@ echo === 打包成 exe ===
 taskkill /f /im VoiceWhisper.exe >nul 2>nul
 timeout /t 2 /nobreak >nul
 set "PY="
-for %%V in (3.12 3.11 3.13) do if not defined PY (py -%%V -c "import sys" >nul 2>nul && set "PY=py -%%V")
-for %%P in (3.12 3.11 3.13) do if not defined PY for /d %%D in ("%USERPROFILE%\.pyenv\pyenv-win\versions\%%P*") do if exist "%%D\python.exe" if not defined PY set PY="%%D\python.exe"
-for %%V in (312 311 313) do if not defined PY if exist "%LOCALAPPDATA%\Programs\Python\Python%%V\python.exe" set PY="%LOCALAPPDATA%\Programs\Python\Python%%V\python.exe"
-if not defined PY python -c "import sys;sys.exit(0 if (3,11)<=sys.version_info[:2]<=(3,13) else 1)" >nul 2>nul && set "PY=python"
+for %%V in (3.12 3.11 3.13 3.14) do if not defined PY (py -%%V -c "import sys" >nul 2>nul && set "PY=py -%%V")
+for %%P in (3.12 3.11 3.13 3.14) do if not defined PY for /d %%D in ("%USERPROFILE%\.pyenv\pyenv-win\versions\%%P*") do if exist "%%D\python.exe" if not defined PY set PY="%%D\python.exe"
+for %%V in (312 311 313 314) do if not defined PY if exist "%LOCALAPPDATA%\Programs\Python\Python%%V\python.exe" set PY="%LOCALAPPDATA%\Programs\Python\Python%%V\python.exe"
+for %%V in (312 311 313 314) do if not defined PY if exist "%ProgramFiles%\Python%%V\python.exe" set PY="%ProgramFiles%\Python%%V\python.exe"
+if not defined PY python -c "import sys;sys.exit(0 if (3,11)<=sys.version_info[:2]<=(3,14) else 1)" >nul 2>nul && set "PY=python"
 if not defined PY (
-  echo 找不到 Python 3.11-3.13。以下是診斷資訊，請截圖給我：
+  echo 找不到 Python 3.11-3.14。以下是診斷資訊，請截圖給我：
   echo --- py 啟動器 ---
   py -0p
   echo --- PATH 上的 python ---

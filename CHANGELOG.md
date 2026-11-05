@@ -2,6 +2,11 @@
 
 版本號格式：`主版本.次版本.修訂`。每次修改程式時，請同步更新 `voice_whisper.pyw` 裡的 `__version__` 與這份檔案。
 
+## [未發佈]
+
+### 變更
+- `start_whisper.bat`、`build_exe.bat` 改為接受 Python 3.11–3.14（3.14 已實測可執行與打包），並多找 `C:\Program Files\Python3xx` 的安裝位置。
+
 ## [0.1.2] - 2026-11-05
 
 ### 修正
