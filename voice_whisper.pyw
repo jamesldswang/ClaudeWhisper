@@ -41,7 +41,7 @@ LANGS = [
 START_KEY = "R"                 # Alt+R
 STOP_KEY = "X"                  # Alt+X
 PREVIEW_CHARS = 72              # 浮動視窗顯示最後幾個字
-__version__ = "0.1.0"
+__version__ = "0.1.2"
 APP_NAME = "VoiceToClipWhisper"
 MODEL_SIZE = "small"           # tiny / base / small / medium  (越大越準越慢)
 SR = 16000
@@ -251,8 +251,12 @@ class Engine:
             self._fail("無法開啟麥克風\n請確認已接上麥克風，並在「設定 > 隱私權與安全性 > 麥克風」允許桌面應用程式存取\n" + str(e))
             return
         try:
+            if self.model is None:
+                # warm_up 可能正拿著鎖在載入，這裡先提示，避免畫面看起來像卡住
+                ui_queue.put(("note", "載入語音模型中，聲音已在錄，請稍候…"))
             self.load_model()
-            ui_queue.put(("ready", None))
+            if self.recording:
+                ui_queue.put(("ready", None))
             self._loop(q)
         except Exception as e:
             log(f"run error: {e!r}")
@@ -264,11 +268,13 @@ class Engine:
         stop = False
         while not stop:
             chunks = [q.get()]
-            while True:
+            # 一次最多取 5 秒，避免模型載入期間累積的聲音被當成一整段超長句子
+            while len(chunks) < 50:
                 try:
                     chunks.append(q.get_nowait())
                 except queue.Empty:
                     break
+            backlog = q.qsize() > 5
             for c in chunks:
                 if c is None:
                     stop = True
@@ -295,11 +301,12 @@ class Engine:
                 self.hyp = ""
                 buf, n, speech, silent, since = [], 0, False, 0.0, 0.0
                 ui_queue.put(("text", self.display()))
-            elif since >= PARTIAL_EVERY:
+            elif since >= PARTIAL_EVERY and not backlog:
                 self.hyp = self.transcribe(audio, False)
                 since = 0.0
                 ui_queue.put(("text", self.display()))
         self.finishing = False
+        log("done")
         ui_queue.put(("done", self.display().strip()))
 
     def stop(self):
@@ -307,6 +314,8 @@ class Engine:
             return
         self.recording = False
         self.finishing = True
+        log("stop requested")
+        ui_queue.put(("stopping", None))
         beep(600)
         try:
             self.stream.stop()
@@ -494,6 +503,12 @@ class Overlay:
                 self.title.config(text=f"錄音中…  [{data}]  Alt+X 停止")
         elif kind == "note":
             self.title.config(text=data)
+        elif kind == "stopping":
+            self.anim = False
+            self.set_tray(False)
+            self.draw_dot("#f1c40f", 8)
+            self.title.config(text="已停止，辨識剩下的內容中，請稍候…")
+            self.show()
         elif kind == "ready":
             if self.anim:
                 self.title.config(text="錄音中…  按 Alt+X 停止並複製")

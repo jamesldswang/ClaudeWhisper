@@ -40,7 +40,7 @@ Windows 桌面常駐小程式（非網頁）。按 **Alt+R** 開始錄音並即�
 | `build_exe.bat` | 打包成 exe（PyInstaller，`--onedir`） |
 | `voice_debug.log` | 執行後自動產生的診斷記錄 |
 | `USER_GUIDE.md` | 使用手冊 |
-| `CHANGELOG.md` | 更新紀錄（目前版本 0.1.0） |
+| `CHANGELOG.md` | 更新紀錄（目前版本 0.1.2） |
 | `SKILL.md` | 給 Claude 的維護說明 |
 
 ## 可調整的設定
