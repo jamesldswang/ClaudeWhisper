@@ -45,7 +45,7 @@ Windows 桌面常駐小程式（非網頁）。按 **Alt+R** 開始錄音，每�
 | `recordings\` | 每次錄音一個資料夾：`part_001.wav`/`.txt`…、`transcript.txt` |
 | `settings.json` | 記住分段長度等設定 |
 | `USER_GUIDE.md` | 使用手冊 |
-| `CHANGELOG.md` | 更新紀錄（目前版本 0.2.4） |
+| `CHANGELOG.md` | 更新紀錄（目前版本 0.2.5） |
 | `SKILL.md` | 給 Claude 的維護說明 |
 
 ## 可調整的設定

@@ -48,7 +48,7 @@ LANGS = [
 START_KEY = "R"                 # Alt+R
 STOP_KEY = "X"                  # Alt+X
 PREVIEW_CHARS = 72              # 浮動視窗顯示最後幾個字
-__version__ = "0.2.4"
+__version__ = "0.2.5"
 APP_NAME = "VoiceToClipWhisper"
 MODEL_SIZE = "small"           # tiny / base / small / medium  (越大越準越慢)
 SR = 16000
@@ -159,11 +159,27 @@ def toggle_autostart():
 
 
 # ----------------------------- 辨識引擎 (faster-whisper) -----------------------------
+# Whisper 把提示詞當成「前面已經說過的話」，不是指令；寫成「請用繁體…」這種句子，
+# 聲音很短或很安靜時會被原封不動抄進結果。所以這裡放的是「風格範例」：繁體中文夾英文、有標點
 PROMPTS = {
-    "auto": "以下是繁體中文與 English 混合的語音內容。中文請用繁體，英文請照原文輸出，不要翻譯。",
-    "zh-TW": "以下是繁體中文的語音內容，請使用繁體中文和標點符號。",
+    "auto": "好的，我們今天先看一下這個 project 的 schedule，然後再討論 API 的部分。",
+    "zh-TW": "好的，我們今天先討論一下這個問題，然後再決定下一步。",
     "zh-CN": "以下是简体中文的句子。",
 }
+
+_CLAUSE_SPLIT = re.compile(r"[，,。.、；;！!？?]+")     # 不以空白分句，否則中英混合句會被拆成單字
+
+
+def strip_prompt_echo(text, prompt):
+    """保險：把結果裡被照抄的提示詞子句刪掉(只刪 6 字以上的整句，避免誤刪正常內容)"""
+    if not prompt or not text:
+        return text
+    for clause in _CLAUSE_SPLIT.split(prompt):
+        if len(clause) >= 6 and clause in text:
+            text = re.sub(re.escape(clause) + r"[，,。.、；;！!？?\s]*", "", text)
+    text = re.sub(r"[，,、﹑]+([。！？])", r"\1", text)      # 「，，。」→「。」
+    text = re.sub(r"([，,、﹑])[，,、﹑]+", r"\1", text)      # 「，，」→「，」
+    return text.strip(" ，,、﹑")
 
 
 _REPEAT_RE = re.compile(r"(\S.{1,40}?)(?:[\s,，、。.]*\1){3,}")
@@ -273,7 +289,8 @@ class Engine:
             vad_filter=True,
             vad_parameters={"min_silence_duration_ms": 500},
         )
-        return collapse_repeats(self.join([x.text.strip() for x in segs]).strip())
+        text = collapse_repeats(self.join([x.text.strip() for x in segs]).strip())
+        return strip_prompt_echo(text, prompt)
 
     # ---- 開始 / 停止 ----
     def toggle(self):
