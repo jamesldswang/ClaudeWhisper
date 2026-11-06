@@ -15,3 +15,7 @@ voice_debug.log
 # 編輯器
 .vscode/
 .idea/
+
+# 錄音檔、逐字稿與個人設定（內含私人錄音）
+recordings/
+settings.json
