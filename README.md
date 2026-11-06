@@ -42,7 +42,7 @@ Windows 桌面常駐小程式（非網頁）。按 **Alt+R** 開始錄音，每�
 | `requirements_whisper.txt` | 套件清單 |
 | `build_exe.bat` | 打包成 exe（PyInstaller，`--onedir`） |
 | `voice_debug.log` | 執行後自動產生的診斷記錄 |
-| `recordings\` | 每次錄音一個資料夾：`part_001.wav`/`.txt`…、`transcript.txt` |
+| `recordings\` | 每次錄音一個資料夾：`part_001.wav`/`.txt`…、`transcript.txt`、`timing.txt`（錄音/轉換時間） |
 | `settings.json` | 記住分段長度等設定 |
 | `USER_GUIDE.md` | 使用手冊 |
 | `CHANGELOG.md` | 更新紀錄（目前版本 0.2.2） |

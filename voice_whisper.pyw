@@ -48,7 +48,7 @@ LANGS = [
 START_KEY = "R"                 # Alt+R
 STOP_KEY = "X"                  # Alt+X
 PREVIEW_CHARS = 72              # 浮動視窗顯示最後幾個字
-__version__ = "0.2.2"
+__version__ = "0.2.3"
 APP_NAME = "VoiceToClipWhisper"
 MODEL_SIZE = "small"           # tiny / base / small / medium  (越大越準越慢)
 SR = 16000
@@ -92,6 +92,15 @@ def log(msg):
             f.write(time.strftime("%H:%M:%S ") + str(msg) + "\n")
     except Exception:
         pass
+
+
+def fmt_dur(sec):
+    """秒數 -> 1:02:03 / 02:03 / 4.2 秒"""
+    if sec < 60:
+        return f"{sec:.1f} 秒"
+    e = int(round(sec))
+    h, m, s = e // 3600, e % 3600 // 60, e % 60
+    return f"{h}:{m:02d}:{s:02d}" if h else f"{m:02d}:{s:02d}"
 
 
 def beep(freq):
@@ -191,6 +200,8 @@ class Engine:
         self.cut_count = 0        # 已切出(送去轉寫)的段數
         self.done_count = 0       # 已轉寫完成的段數
         self.last_text = ""
+        self.t_start = 0.0        # 開始錄音的時間點
+        self.t_stop = 0.0         # 按下停止的時間點
         try:
             self.chunk_min = max(1, int(load_settings().get("chunk_min", DEFAULT_CHUNK_MIN)))
         except (TypeError, ValueError):
@@ -293,6 +304,8 @@ class Engine:
         self.recording = True
         self.cut_count = self.done_count = 0
         self.last_text = ""
+        self.t_start = time.time()
+        self.t_stop = 0.0
         self.audio_q = queue.Queue()
         self.parts_q = queue.Queue()
         log(f"session start: {self.session_dir} (每 {self.chunk_min} 分鐘一段)")
@@ -384,20 +397,26 @@ class Engine:
 
     def _transcribe_worker(self, parts_q, session_dir):
         texts = []
+        stats = []                           # (段號, 錄音秒數, 轉換秒數)
         while True:
             item = parts_q.get()
             if item is None:
                 break
             idx, path = item
+            audio_sec = 0.0
+            t0 = time.time()
             try:
                 with wave.open(path, "rb") as wf:
                     raw = wf.readframes(wf.getnframes())
                 audio = np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768.0
+                audio_sec = len(audio) / SR
                 text = self.transcribe(audio)
             except Exception as e:
                 log(f"transcribe part {idx} error: {e!r}")
                 text = f"[第 {idx} 段轉寫失敗：{e}，錄音檔 {os.path.basename(path)} 仍保留]"
-            log(f"part {idx}: {text}")
+            conv_sec = time.time() - t0
+            stats.append((idx, audio_sec, conv_sec))
+            log(f"part {idx}: 錄音 {fmt_dur(audio_sec)}，轉換 {fmt_dur(conv_sec)} | {text}")
             try:
                 with open(path[:-4] + ".txt", "w", encoding="utf-8") as f:
                     f.write(text + "\n")
@@ -414,16 +433,46 @@ class Engine:
                 f.write(full + "\n")
         except Exception as e:
             log(f"write transcript error: {e!r}")
+        timing = self._write_timing(session_dir, stats)
         self.finishing = False
-        log(f"done: {len(texts)} parts -> {session_dir}")
-        ui_queue.put(("done", (full, session_dir, len(texts))))
+        log(f"done: {len(texts)} parts -> {session_dir} | {timing['summary']}")
+        ui_queue.put(("done", (full, session_dir, len(texts), timing)))
+
+    def _write_timing(self, session_dir, stats):
+        """把錄音時間、轉換時間寫進 timing.txt (transcript.txt 保持只有文字，方便貼上)"""
+        t_end = time.time()
+        t_stop = self.t_stop or t_end
+        rec_sec = sum(a for _, a, _ in stats)                 # 實際錄到的聲音長度
+        conv_sec = sum(c for _, _, c in stats)                # 轉換總耗時(含第一次載入模型)
+        wait_sec = max(0.0, t_end - t_stop)                   # 按下停止後等多久才拿到逐字稿
+        speed = rec_sec / conv_sec if conv_sec > 0 else 0.0
+        summary = (f"錄音 {fmt_dur(rec_sec)}，轉換 {fmt_dur(conv_sec)}"
+                   f"（{speed:.1f}x 即時），停止後等待 {fmt_dur(wait_sec)}")
+        fmt = "%Y-%m-%d %H:%M:%S"
+        lines = [
+            f"開始錄音：{time.strftime(fmt, time.localtime(self.t_start))}",
+            f"停止錄音：{time.strftime(fmt, time.localtime(t_stop))}",
+            f"轉換完成：{time.strftime(fmt, time.localtime(t_end))}",
+            f"錄音長度：{fmt_dur(rec_sec)}",
+            f"轉換耗時：{fmt_dur(conv_sec)}（速度 {speed:.1f}x 即時，模型 {MODEL_SIZE}）",
+            f"停止後等待：{fmt_dur(wait_sec)}",
+            "",
+            "段落\t錄音長度\t轉換耗時",
+        ] + [f"part_{i:03d}\t{fmt_dur(a)}\t{fmt_dur(c)}" for i, a, c in stats]
+        try:
+            with open(os.path.join(session_dir, "timing.txt"), "w", encoding="utf-8") as f:
+                f.write("\n".join(lines) + "\n")
+        except Exception as e:
+            log(f"write timing error: {e!r}")
+        return {"rec": rec_sec, "conv": conv_sec, "wait": wait_sec, "summary": summary}
 
     def stop(self):
         if not self.recording:
             return
         self.recording = False
         self.finishing = True
-        log("stop requested")
+        self.t_stop = time.time()
+        log(f"stop requested (錄了 {fmt_dur(self.t_stop - self.t_start)})")
         ui_queue.put(("stopping", None))
         beep(600)
         try:
@@ -709,20 +758,20 @@ class Overlay:
             self.title.config(text="上一次錄音還在轉寫中，完成後才能再開始")
             self.show()
         elif kind == "done":
-            full, folder, parts = data
+            full, folder, parts, timing = data
             self.anim = False
             self.set_tray(False)
             if full:
                 ok = set_clipboard(full)
                 self.draw_dot("#2ecc71", 8)
                 self.title.config(text=f"✔ 完整逐字稿已複製 ({parts} 段)，Ctrl+V 貼上" if ok else "複製失敗")
-                self.set_text(f"已存到：{folder}\transcript.txt")
+                self.set_text(f"{timing['summary']}\n已存到：{os.path.join(folder, 'transcript.txt')}", full=True)
                 self.show()
                 self.hide_later(6000)
             else:
                 self.draw_dot("#aaaaaa", 8)
                 self.title.config(text="沒有辨識到內容 (錄音檔仍保留)")
-                self.set_text(folder)
+                self.set_text(f"{timing['summary']}\n{folder}", full=True)
                 self.show()
                 self.hide_later(4000)
         elif kind == "ask_chunk":
