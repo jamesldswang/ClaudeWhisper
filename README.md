@@ -45,7 +45,7 @@ Windows 桌面常駐小程式（非網頁）。按 **Alt+R** 開始錄音，每�
 | `recordings\` | 每次錄音一個資料夾：`part_001.wav`/`.txt`…、`transcript.txt` |
 | `settings.json` | 記住分段長度等設定 |
 | `USER_GUIDE.md` | 使用手冊 |
-| `CHANGELOG.md` | 更新紀錄（目前版本 0.2.2） |
+| `CHANGELOG.md` | 更新紀錄（目前版本 0.2.4） |
 | `SKILL.md` | 給 Claude 的維護說明 |
 
 ## 可調整的設定
@@ -58,6 +58,7 @@ Windows 桌面常駐小程式（非網頁）。按 **Alt+R** 開始錄音，每�
 | `START_KEY` / `STOP_KEY` | `R` / `X` | 快捷鍵（皆搭配 Alt） |
 | `DEFAULT_CHUNK_MIN` | `10` | 預設分段長度（分鐘）；平常直接在系統匣選單改即可 |
 | `CUT_GRACE_SEC` | `5` | 時間到後最多再等幾秒找安靜處再切 |
+| `SLICE_SEC` / `SLICE_MAX_SEC` | `20` / `29` | 錄音中每累積幾秒（找安靜處，最長幾秒硬切）就先送一小片去背景轉寫 |
 | `SPEECH_RMS` | `0.006` | 低於此音量視為安靜（用來找切段點） |
 | `DEFAULT_LANG` | `auto` | 預設辨識語言 |
 

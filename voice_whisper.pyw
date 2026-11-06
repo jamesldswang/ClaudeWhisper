@@ -48,7 +48,7 @@ LANGS = [
 START_KEY = "R"                 # Alt+R
 STOP_KEY = "X"                  # Alt+X
 PREVIEW_CHARS = 72              # 浮動視窗顯示最後幾個字
-__version__ = "0.2.2"
+__version__ = "0.2.4"
 APP_NAME = "VoiceToClipWhisper"
 MODEL_SIZE = "small"           # tiny / base / small / medium  (越大越準越慢)
 SR = 16000
@@ -56,6 +56,8 @@ SPEECH_RMS = 0.006              # 低於此音量視為安靜
 DEFAULT_CHUNK_MIN = 10          # 預設每幾分鐘切一段錄音送去轉文字
 CHUNK_PRESETS = [1, 3, 5, 10, 15, 20, 30]   # 系統匣選單的快速選項(分鐘)
 CUT_GRACE_SEC = 5               # 時間到後最多再等幾秒，找安靜的瞬間再切，避免切在字中間
+SLICE_SEC = 20                  # 錄音中滿幾秒後，找安靜瞬間把一小片送去背景轉寫(停止後只剩最後一小片要等)
+SLICE_MAX_SEC = 29              # 一小片最長幾秒就硬切；Whisper 以 30 秒為一個窗口，超過會多算一整窗、反而變慢
 # ---------------------------------------------------------------
 
 ui_queue: "queue.Queue" = queue.Queue()
@@ -174,8 +176,10 @@ def collapse_repeats(text):
 
 class Engine:
     """錄音與轉寫分兩條執行緒同時進行：
-    錄音執行緒 -> 每 chunk_min 分鐘把錄音存成 part_NNN.wav，丟進 parts_q，接著錄下一段
-    轉寫執行緒 -> 從 parts_q 依序取出 wav 轉成文字(part_NNN.txt)；停止後合併成 transcript.txt
+    錄音執行緒 -> 每 chunk_min 分鐘把錄音存成 part_NNN.wav，接著錄下一段；
+                  同時每 SLICE_SEC～SLICE_MAX_SEC 秒(找安靜瞬間)把記憶體裡的一小片聲音丟進 parts_q
+    轉寫執行緒 -> 依序轉寫每一小片，同一段的小片接起來寫成 part_NNN.txt；停止後合併成 transcript.txt
+    這樣按下停止時只剩最後一小片(<= SLICE_MAX_SEC 秒)要轉，不必等整段
     """
 
     def __init__(self):
@@ -260,7 +264,7 @@ class Engine:
             audio,
             language=lang,
             initial_prompt=prompt,
-            beam_size=5,
+            beam_size=1,                # 5 較準但慢 2~3 倍；邊錄邊轉要跟得上錄音速度
             # 不可固定成 0.0：輸出重複太嚴重(壓縮率 > 2.4)時，要靠提高 temperature 重新解碼，
             # 否則會出現 "the 6th, the 6th, the 6th…" 這種無限重複的幻覺
             temperature=[0.0, 0.2, 0.4, 0.6, 0.8, 1.0],
@@ -340,8 +344,17 @@ class Engine:
             self._fail(f"錄音失敗：{e}\n已錄下的部分在：{self.session_dir}")
 
     def _record_loop(self, q):
-        """把麥克風聲音寫進 part_NNN.wav；時間到就收尾這一段、交給轉寫，立刻開下一段"""
+        """把麥克風聲音寫進 part_NNN.wav；時間到就收尾這一段、立刻開下一段。
+        另外每 SLICE_SEC～SLICE_MAX_SEC 秒把累積的聲音(一小片)交給轉寫執行緒，邊錄邊轉"""
         idx, wf, path, n = 0, None, "", 0
+        buf, buf_n = [], 0                    # 還沒送去轉寫的聲音
+
+        def flush(last):
+            nonlocal buf, buf_n
+            audio = np.concatenate(buf) if buf_n >= SR // 2 else None   # 不到 0.5 秒不轉
+            buf, buf_n = [], 0
+            if audio is not None or last:
+                self.parts_q.put((idx, path, audio, last))
 
         def open_part():
             nonlocal idx, wf, path, n
@@ -363,7 +376,7 @@ class Engine:
                 return
             self.cut_count += 1
             log(f"cut part {idx}: {n / SR:.1f}s")
-            self.parts_q.put((idx, path))
+            flush(True)
             self._progress()
 
         open_part()
@@ -371,32 +384,44 @@ class Engine:
             c = q.get()
             if c is None:
                 break
-            wf.writeframes((np.clip(c, -1.0, 1.0) * 32767).astype(np.int16).tobytes())
+            c = np.clip(c, -1.0, 1.0)
+            wf.writeframes((c * 32767).astype(np.int16).tobytes())
             n += len(c)
+            buf.append(c)
+            buf_n += len(c)
+            quiet = float(np.sqrt(np.mean(c * c))) < SPEECH_RMS
             limit = self.chunk_min * 60 * SR
-            if n >= limit:
-                quiet = float(np.sqrt(np.mean(c * c))) < SPEECH_RMS
-                if quiet or n >= limit + CUT_GRACE_SEC * SR:
-                    close_part()
-                    open_part()
+            if n >= limit and (quiet or n >= limit + CUT_GRACE_SEC * SR):
+                close_part()
+                open_part()
+            elif buf_n >= SLICE_SEC * SR and (quiet or buf_n >= SLICE_MAX_SEC * SR):
+                flush(False)
         close_part()
         self.parts_q.put(None)               # 告訴轉寫執行緒：沒有下一段了
 
     def _transcribe_worker(self, parts_q, session_dir):
         texts = []
+        pieces = []                          # 目前這一段已轉好的小片文字
         while True:
             item = parts_q.get()
             if item is None:
                 break
-            idx, path = item
-            try:
-                with wave.open(path, "rb") as wf:
-                    raw = wf.readframes(wf.getnframes())
-                audio = np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768.0
-                text = self.transcribe(audio)
-            except Exception as e:
-                log(f"transcribe part {idx} error: {e!r}")
-                text = f"[第 {idx} 段轉寫失敗：{e}，錄音檔 {os.path.basename(path)} 仍保留]"
+            idx, path, audio, last = item
+            if audio is not None:
+                try:
+                    t0 = time.time()
+                    piece = self.transcribe(audio)
+                    log(f"part {idx} slice {len(audio) / SR:.1f}s -> {time.time() - t0:.1f}s")
+                except Exception as e:
+                    log(f"transcribe part {idx} error: {e!r}")
+                    piece = f"[第 {idx} 段部分轉寫失敗：{e}，錄音檔 {os.path.basename(path)} 仍保留]"
+                pieces.append(piece)
+                self.last_text = piece or self.last_text
+            if not last:
+                self._progress()
+                continue
+            text = self.join(pieces).strip()
+            pieces = []
             log(f"part {idx}: {text}")
             try:
                 with open(path[:-4] + ".txt", "w", encoding="utf-8") as f:
@@ -405,7 +430,6 @@ class Engine:
                 log(f"write part txt error: {e!r}")
             texts.append(text)
             self.done_count += 1
-            self.last_text = text or self.last_text
             self._progress()
 
         full = "\n\n".join(t for t in texts if t).strip()
@@ -687,7 +711,7 @@ class Overlay:
             self.cut, self.done, last = data
             if self.anim:
                 if last:
-                    self.set_text(f"第 {self.done} 段：{last}")
+                    self.set_text(f"最新：{last}")
             else:
                 self.title.config(text=f"已停止，轉寫剩下的段落中 ({self.done}/{self.cut})，請稍候…")
         elif kind == "note":
