@@ -3,3 +3,6 @@ Pillow
 numpy
 sounddevice
 faster-whisper
+soundcard
+sherpa-onnx
+anthropic

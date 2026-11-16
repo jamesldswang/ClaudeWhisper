@@ -32,7 +32,8 @@ if not exist ".venv\Scripts\python.exe" (
   --hidden-import pystray._win32 ^
   --collect-all faster_whisper --collect-all ctranslate2 --collect-all onnxruntime ^
   --collect-all tokenizers --collect-all av --collect-all _sounddevice_data ^
-  --collect-all huggingface_hub ^
+  --collect-all huggingface_hub --collect-all soundcard ^
+  --collect-all sherpa_onnx --collect-all anthropic ^
   voice_whisper.pyw || (echo 打包失敗 & pause & exit /b)
 echo.
 echo 完成！請執行 dist\VoiceWhisper\VoiceWhisper.exe  (整個 VoiceWhisper 資料夾要一起保留)

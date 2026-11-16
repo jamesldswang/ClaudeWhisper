@@ -19,3 +19,5 @@ voice_debug.log
 # 錄音檔、逐字稿與個人設定（內含私人錄音）
 recordings/
 settings.json
+glossary.txt
+models/
